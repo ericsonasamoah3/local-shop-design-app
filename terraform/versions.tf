@@ -15,13 +15,13 @@ terraform {
   # use_lockfile enables S3's native conditional-write locking
   # (Terraform >= 1.10) — no DynamoDB table needed.
   #
-  # backend "s3" {
-  #   bucket       = "YOUR-TF-STATE-BUCKET"
-  #   key          = "app/terraform.tfstate"
-  #   region       = "us-east-1"
-  #   encrypt      = true
-  #   use_lockfile = true
-  # }
+  backend "s3" {
+    bucket       = "local-shop-design-app-tfstate-258506450105"
+    key          = "app/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {

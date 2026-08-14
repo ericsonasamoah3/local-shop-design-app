@@ -84,7 +84,7 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   ingress {
-    description = "Between services (frontend -> backend) via Service Connect"
+    description = "Between frontend and backend services via Service Connect"
     from_port   = 0
     to_port     = 65535
     protocol    = "tcp"

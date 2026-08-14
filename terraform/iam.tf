@@ -116,7 +116,7 @@ resource "aws_iam_role" "github_actions" {
           # Restrict to this repo, any branch/PR. Tighten further to
           # "repo:ORG/REPO:ref:refs/heads/main" if you only ever want
           # main to be able to assume this role.
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          "token.actions.githubusercontent.com:sub" = "repo:ericsonasamoah3@84795350/local-shop-design-app@1334094868:*"
         }
       }
     }]

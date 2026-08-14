@@ -7,3 +7,4 @@ backend/composites/*
 !backend/composites/mock-placeholder.svg
 .env
 *.log
+terraform/.terraform/
