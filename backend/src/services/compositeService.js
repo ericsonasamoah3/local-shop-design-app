@@ -2,18 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-// Phase 2: real inpainting via Replicate's hosted API.
-//
-// IMPORTANT — model choice: this uses a Replicate model version pinned via
-// the REPLICATE_MODEL_VERSION env var. Replicate model versions change over
-// time, so confirm the current version hash for whichever inpainting model
-// you pick at replicate.com before running this — a stale/incorrect version
-// hash is the most common reason this call fails outright. A model that
-// supports image-conditioned reference input (e.g. an IP-Adapter-style
-// inpainting model) is the better fit for this use case, per the earlier
-// discussion — it preserves the real product's actual appearance, rather
-// than a text-prompt-only inpainting model which just generates *a* similar
-// item, not the specific one being suggested.
+// AI image editing via Replicate's FLUX Kontext Pro API. It accepts the room
+// image plus an editing instruction. This gives new Replicate accounts a
+// limited free trial, but does not support a mask or a product-image reference.
 //
 // This module keeps an in-memory job store (composite_id -> status/result).
 // That's fine for local dev / a single backend instance, but won't survive
@@ -21,7 +12,6 @@ const { v4: uuidv4 } = require('uuid');
 // (e.g. Redis) before this goes anywhere beyond your own machine.
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-const REPLICATE_MODEL_VERSION = process.env.REPLICATE_MODEL_VERSION;
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 
 const jobs = new Map(); // composite_id -> { status, composite_url, error }
@@ -29,9 +19,6 @@ const jobs = new Map(); // composite_id -> { status, composite_url, error }
 function assertConfigured() {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('missing_replicate_token');
-  }
-  if (!REPLICATE_MODEL_VERSION) {
-    throw new Error('missing_model_version');
   }
 }
 
@@ -55,23 +42,17 @@ function buildPrompt(product) {
   return `a ${product.name.toLowerCase()}${styleText}, realistic photo, natural lighting, placed naturally in the scene`;
 }
 
-async function createReplicatePrediction({ roomImageDataUri, maskDataUri, productImageUrl, product }) {
-  const response = await fetch('https://api.replicate.com/v1/predictions', {
+async function createReplicatePrediction({ roomImageDataUri, product }) {
+  const response = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
     method: 'POST',
     headers: {
       Authorization: `Token ${REPLICATE_API_TOKEN}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      version: REPLICATE_MODEL_VERSION,
       input: {
-        image: roomImageDataUri,
-        mask: maskDataUri,
-        // Reference/IP-adapter style models accept a reference image input
-        // under varying field names depending on the specific model — check
-        // the model's own schema on Replicate and adjust this key to match.
-        ip_adapter_image: productImageUrl,
-        prompt: buildPrompt(product),
+        input_image: roomImageDataUri,
+        prompt: `Edit this room photo by adding ${buildPrompt(product)}. Keep the existing room composition, lighting, and all other furnishings unchanged.`,
       },
     }),
   });
@@ -99,12 +80,7 @@ async function runCompositeJob(compositeId, { uploadId, maskDataUri, productImag
     assertConfigured();
     const roomImageDataUri = roomPhotoAsDataUri(uploadId);
 
-    let prediction = await createReplicatePrediction({
-      roomImageDataUri,
-      maskDataUri,
-      productImageUrl,
-      product,
-    });
+    let prediction = await createReplicatePrediction({ roomImageDataUri, product });
 
     // Poll until the prediction leaves the queue. Replicate predictions are
     // async on their side too — this loop just waits for their job to
