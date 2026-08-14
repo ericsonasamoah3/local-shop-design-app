@@ -1,0 +1,9 @@
+node_modules/
+dist/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/composites/*
+!backend/composites/.gitkeep
+!backend/composites/mock-placeholder.svg
+.env
+*.log

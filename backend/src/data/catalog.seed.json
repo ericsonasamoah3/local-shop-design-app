@@ -1,0 +1,101 @@
+{
+  "shops": [
+    {
+      "id": "shop-1",
+      "name": "Local Linen Co.",
+      "location": "Biggleswade, UK",
+      "source_type": "local"
+    },
+    {
+      "id": "shop-2",
+      "name": "Heritage Textiles",
+      "location": "Biggleswade, UK",
+      "source_type": "local"
+    },
+    {
+      "id": "shop-3",
+      "name": "The Cosy Corner",
+      "location": "Bedford, UK",
+      "source_type": "local"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod-bedding-1",
+      "shop_id": "shop-1",
+      "category": "duvet",
+      "name": "Linen Duvet Set",
+      "price": 89.99,
+      "price_tier": "mid",
+      "style": "modern",
+      "image_url": "https://placehold.co/400x400?text=Linen+Duvet+Set",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-2",
+      "shop_id": "shop-2",
+      "category": "duvet",
+      "name": "Cotton Quilt Set",
+      "price": 65.00,
+      "price_tier": "budget",
+      "style": "rustic",
+      "image_url": "https://placehold.co/400x400?text=Cotton+Quilt+Set",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-3",
+      "shop_id": "shop-3",
+      "category": "duvet",
+      "name": "Egyptian Cotton Duvet Set",
+      "price": 149.99,
+      "price_tier": "premium",
+      "style": "minimalist",
+      "image_url": "https://placehold.co/400x400?text=Egyptian+Cotton+Duvet",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-4",
+      "shop_id": "shop-1",
+      "category": "pillow",
+      "name": "Feather Pillow Pair",
+      "price": 34.99,
+      "price_tier": "mid",
+      "style": "modern",
+      "image_url": "https://placehold.co/400x400?text=Feather+Pillow+Pair",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-5",
+      "shop_id": "shop-2",
+      "category": "pillow",
+      "name": "Basic Poly Pillow Pair",
+      "price": 14.50,
+      "price_tier": "budget",
+      "style": "rustic",
+      "image_url": "https://placehold.co/400x400?text=Basic+Poly+Pillow",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-6",
+      "shop_id": "shop-3",
+      "category": "throw",
+      "name": "Chunky Knit Throw",
+      "price": 42.00,
+      "price_tier": "mid",
+      "style": "rustic",
+      "image_url": "https://placehold.co/400x400?text=Chunky+Knit+Throw",
+      "stock_status": "in_stock"
+    },
+    {
+      "id": "prod-bedding-7",
+      "shop_id": "shop-1",
+      "category": "throw",
+      "name": "Minimalist Wool Throw",
+      "price": 78.00,
+      "price_tier": "premium",
+      "style": "minimalist",
+      "image_url": "https://placehold.co/400x400?text=Minimalist+Wool+Throw",
+      "stock_status": "in_stock"
+    }
+  ]
+}

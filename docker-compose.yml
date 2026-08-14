@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3001"
+    volumes:
+      # Bind mounts to host directories (not named Docker volumes) — lets
+      # you inspect uploaded photos and generated composites directly from
+      # your host filesystem while testing, e.g. `ls backend/uploads`,
+      # rather than having to `docker volume inspect` / exec into the
+      # container to see what's there.
+      - ./backend/uploads:/app/uploads
+      - ./backend/composites:/app/composites
+    environment:
+      - PORT=3001
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - REPLICATE_MODEL_VERSION=${REPLICATE_MODEL_VERSION}
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+# nginx proxies /uploads/ and /composites/ through to the backend (see
+# frontend/nginx.conf) rather than serving files itself, so only the
+# backend container needs these mounted.
