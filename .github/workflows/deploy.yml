@@ -1,0 +1,78 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write   # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: photoapp-cluster
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPO: photoapp-backend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPO:$IMAGE_TAG -t $REGISTRY/$REPO:latest ./backend
+          docker push $REGISTRY/$REPO:$IMAGE_TAG
+          docker push $REGISTRY/$REPO:latest
+
+      - name: Build and push frontend image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPO: photoapp-frontend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPO:$IMAGE_TAG -t $REGISTRY/$REPO:latest ./frontend
+          docker push $REGISTRY/$REPO:$IMAGE_TAG
+          docker push $REGISTRY/$REPO:latest
+
+      - name: Deploy backend
+        env:
+          IMAGE: ${{ steps.ecr-login.outputs.registry }}/photoapp-backend:${{ github.sha }}
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition photoapp-backend --query taskDefinition)
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE" \
+            'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) |
+             .containerDefinitions[0].image = $IMAGE')
+          echo "$NEW_TASK_DEF" > backend-task-def.json
+          aws ecs register-task-definition --cli-input-json file://backend-task-def.json
+          aws ecs update-service --cluster $ECS_CLUSTER --service photoapp-backend --task-definition photoapp-backend --force-new-deployment
+
+      - name: Deploy frontend
+        env:
+          IMAGE: ${{ steps.ecr-login.outputs.registry }}/photoapp-frontend:${{ github.sha }}
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition photoapp-frontend --query taskDefinition)
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE" \
+            'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) |
+             .containerDefinitions[0].image = $IMAGE')
+          echo "$NEW_TASK_DEF" > frontend-task-def.json
+          aws ecs register-task-definition --cli-input-json file://frontend-task-def.json
+          aws ecs update-service --cluster $ECS_CLUSTER --service photoapp-frontend --task-definition photoapp-frontend --force-new-deployment
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable --cluster $ECS_CLUSTER --services photoapp-backend photoapp-frontend
