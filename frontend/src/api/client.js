@@ -46,11 +46,18 @@ export async function getSuggestions({ uploadId, spaceType, budget, style }) {
   return data;
 }
 
-export async function createComposite({ uploadId, productId, maskDataUri }) {
+// baseCompositeId layers onto an earlier composite instead of the original
+// upload, so the user can keep building on the scene they've already made.
+export async function createComposite({ uploadId, productId, maskDataUri, baseCompositeId }) {
   const response = await fetch('/api/composite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ upload_id: uploadId, product_id: productId, mask_data: maskDataUri }),
+    body: JSON.stringify({
+      upload_id: uploadId,
+      product_id: productId,
+      mask_data: maskDataUri,
+      base_composite_id: baseCompositeId || null,
+    }),
   });
 
   const data = await parseJsonSafely(response);
@@ -74,7 +81,14 @@ export async function getCompositeStatus(compositeId) {
 // Polls until the composite job leaves "processing". Simple fixed-interval
 // polling — fine for Phase 2's scale, swap for something smarter (backoff,
 // websockets) if this becomes a bottleneck later.
-export async function pollComposite(compositeId, { intervalMs = 2000, maxAttempts = 40 } = {}) {
+//
+// maxAttempts MUST outlast the backend's own worst case, or we tell the user
+// it timed out while the job carries on, succeeds and writes a composite
+// nobody ever sees — which is money spent for nothing. The backend budget is
+// planning (60s x 2 attempts) + render (REPLICATE_MAX_POLLS x 2s = 180s)
+// + overhead, so ~300s. 170 x 2s = 340s clears it with margin.
+// See compositeService.js for the other half of this pair.
+export async function pollComposite(compositeId, { intervalMs = 2000, maxAttempts = 170 } = {}) {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await getCompositeStatus(compositeId);
     if (result.status !== 'processing') return result;

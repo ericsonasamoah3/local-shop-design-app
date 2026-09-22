@@ -1,0 +1,24 @@
+# node_modules MUST be excluded. sharp ships platform-specific native binaries
+# (@img/sharp-win32-x64 on this machine), and `COPY . .` runs after the
+# container's own `npm install` — copying the host tree in would replace the
+# linuxmusl binaries with Windows ones and the backend would die on require.
+node_modules
+npm-debug.log*
+
+# Secrets never belong in an image layer.
+.env
+.env.*
+!.env.example
+
+# Runtime data. Bind-mounted in compose, on EFS in ECS; the Dockerfile creates
+# the empty directories itself.
+uploads/
+composites/
+
+# Local test scratch
+.fixtures/
+*.log
+
+# Not needed inside the image
+Dockerfile
+.dockerignore

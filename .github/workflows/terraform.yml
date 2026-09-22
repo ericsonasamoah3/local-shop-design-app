@@ -39,13 +39,38 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      # Baseline config lives in terraform/ci.auto.tfvars, which Terraform
+      # loads automatically. The REPLICATE_MODEL_VERSION repo variable is an
+      # OPTIONAL override, so the model can be swapped from the GitHub UI
+      # without a commit.
+      #
+      # The override is only passed when it is non-empty. This matters: an
+      # unset repo variable renders as "", and an explicit -var="" beats the
+      # value from a tfvars file. Passing it unconditionally is what wrote an
+      # empty model version into every deploy and made the backend refuse
+      # every composite. Keep the guard.
+      #
+      # If you do set the override, update backend_env in ci.auto.tfvars to
+      # match the new model's input schema -- the two belong together, and the
+      # check block in variables.tf warns when they disagree.
       - name: Terraform Plan
         id: plan
+        env:
+          MODEL_OVERRIDE: ${{ vars.REPLICATE_MODEL_VERSION }}
         run: |
+          OVERRIDE=()
+          if [ -n "$MODEL_OVERRIDE" ]; then
+            OVERRIDE=(-var="replicate_model_version=$MODEL_OVERRIDE")
+            echo "Model override from repo variable: $MODEL_OVERRIDE"
+          else
+            echo "No model override set; using terraform/ci.auto.tfvars"
+          fi
           terraform plan -no-color -input=false \
             -var="github_org=${{ github.repository_owner }}" \
             -var="github_repo=${{ github.event.repository.name }}" \
+            -var="anthropic_api_key=${{ secrets.ANTHROPIC_API_KEY }}" \
             -var="replicate_api_token=${{ secrets.REPLICATE_API_TOKEN }}" \
+            "${OVERRIDE[@]}" \
             -out=tfplan
         continue-on-error: true
 

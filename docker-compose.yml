@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build: ./backend
@@ -15,8 +13,26 @@ services:
       - ./backend/composites:/app/composites
     environment:
       - PORT=3001
+      # Optional: unset means the backend skips the Claude planning call.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL-claude-opus-5}
       - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
       - REPLICATE_MODEL_VERSION=${REPLICATE_MODEL_VERSION}
+      # Single-dash defaults: absent from .env falls back to the value below,
+      # but present-and-empty stays empty, which is how a field is omitted for
+      # a model that does not declare it.
+      - REPLICATE_FIELD_IMAGE=${REPLICATE_FIELD_IMAGE-image}
+      - REPLICATE_FIELD_MASK=${REPLICATE_FIELD_MASK-mask}
+      - REPLICATE_FIELD_PROMPT=${REPLICATE_FIELD_PROMPT-prompt}
+      - REPLICATE_FIELD_NEGATIVE_PROMPT=${REPLICATE_FIELD_NEGATIVE_PROMPT-negative_prompt}
+      - REPLICATE_FIELD_REFERENCE=${REPLICATE_FIELD_REFERENCE-ip_adapter_image}
+      - REPLICATE_FIELD_REFERENCE_STRENGTH=${REPLICATE_FIELD_REFERENCE_STRENGTH-ip_adapter_weight}
+      - MAX_RENDER_EDGE=${MAX_RENDER_EDGE-1024}
+      # Spend cap on the unauthenticated /api/composite endpoint. Defaults to
+      # 20 composites per client per hour; set RATE_LIMIT_MAX=0 to disable it
+      # while testing locally.
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX-20}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS-3600000}
 
   frontend:
     build: ./frontend

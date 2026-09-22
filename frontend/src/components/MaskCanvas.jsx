@@ -1,24 +1,52 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 
 // Lets the user drag a rough rectangle over their uploaded photo to mark
 // where the selected item should be composited in. Phase 2 uses manual
 // placement rather than auto-detection — see CLAUDE.md for why.
 //
 // Produces a black/white mask PNG (white = area to fill) as a base64 data
-// URI, matching the uploaded photo's natural dimensions, since that's what
-// the inpainting model needs.
+// URI, at the uploaded photo's natural dimensions, since that is the
+// coordinate space the backend reduces to a bounding box.
+//
+// Two things have to stay true or the mask lands in the wrong place:
+//   - the photo is displayed whole, at its own aspect ratio. Cropping it to
+//     fit a fixed box (object-fit: cover) would mean the area the user drew
+//     on is not the area confirmMask() maps back onto the full image.
+//   - the canvas backing store matches its displayed CSS size, so pointer
+//     coordinates and canvas coordinates are the same numbers.
 
 export default function MaskCanvas({ imageUrl, onMaskReady }) {
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
   const [drawing, setDrawing] = useState(false);
-  const [box, setBox] = useState(null); // { x, y, w, h } in displayed-canvas coordinates
+  const [box, setBox] = useState(null); // { x, y, w, h } in displayed pixels
   const [naturalSize, setNaturalSize] = useState(null);
+  const [displaySize, setDisplaySize] = useState(null);
+
+  const measure = useCallback(() => {
+    const img = imgRef.current;
+    if (!img || !img.clientWidth) return;
+    setDisplaySize({ width: img.clientWidth, height: img.clientHeight });
+  }, []);
 
   function handleImageLoad() {
     const img = imgRef.current;
     setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+    measure();
   }
+
+  // The photo is responsive, so the drawn box has to be discarded and the
+  // canvas resized whenever the displayed size changes.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    return () => observer.disconnect();
+  }, [measure]);
 
   function getCanvasPoint(e) {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -45,23 +73,23 @@ export default function MaskCanvas({ imageUrl, onMaskReady }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !box) return;
+    if (!canvas || !displaySize) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!box) return;
     ctx.strokeStyle = '#c98a2e';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
     ctx.strokeRect(box.x, box.y, box.w, box.h);
     ctx.fillStyle = 'rgba(201, 138, 46, 0.2)';
     ctx.fillRect(box.x, box.y, box.w, box.h);
-  }, [box]);
+  }, [box, displaySize]);
 
   function confirmMask() {
-    if (!box || !naturalSize || !canvasRef.current) return;
+    if (!box || !naturalSize || !displaySize) return;
 
-    const displayRect = canvasRef.current.getBoundingClientRect();
-    const scaleX = naturalSize.width / displayRect.width;
-    const scaleY = naturalSize.height / displayRect.height;
+    const scaleX = naturalSize.width / displaySize.width;
+    const scaleY = naturalSize.height / displaySize.height;
 
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = naturalSize.width;
@@ -98,8 +126,8 @@ export default function MaskCanvas({ imageUrl, onMaskReady }) {
         <canvas
           ref={canvasRef}
           className="mask-canvas__overlay"
-          width={480}
-          height={480}
+          width={displaySize ? displaySize.width : 0}
+          height={displaySize ? displaySize.height : 0}
           onMouseDown={handlePointerDown}
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}

@@ -23,9 +23,20 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "AZs to spread public subnets across"
+  description = "AZs to place public subnets in. Two were required by the ALB; with it gone, one is enough and avoids a second EFS mount target plus cross-AZ traffic."
   type        = list(string)
-  default     = ["eu-north-1a", "eu-north-1b"]
+  default     = ["eu-north-1a"]
+}
+
+variable "frontend_allowed_cidrs" {
+  description = <<-EOT
+    Who may reach the frontend task directly. Defaults to the whole
+    internet, matching the old ALB. Set to a single "<your.ip>/32" entry
+    to keep the unauthenticated /api/composite endpoint, which spends
+    Anthropic and Replicate credits per call, off the public internet.
+  EOT
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }
 
 variable "backend_container_port" {
@@ -68,6 +79,13 @@ variable "github_repo" {
   type        = string
 }
 
+variable "anthropic_api_key" {
+  description = "Optional. Anthropic API key for the composite planning step. Leave empty to run without Claude -- the backend falls back to the user's own rectangle and a template prompt."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "replicate_api_token" {
   description = "Replicate API token, injected into the backend task as a secret"
   type        = string
@@ -75,6 +93,52 @@ variable "replicate_api_token" {
 }
 
 variable "replicate_model_version" {
-  type    = string
-  default = ""
+  description = "Either an owner/name slug for an official hosted model, or a 64-hex community version hash"
+  type        = string
+  default     = ""
+}
+
+variable "backend_env" {
+  description = <<-EOT
+    Extra plain environment variables for the backend task, e.g. the
+    REPLICATE_FIELD_* overrides for the chosen model and MAX_RENDER_EDGE.
+    Set a REPLICATE_FIELD_* key to "" to omit that input field entirely --
+    required for mask-only models such as black-forest-labs/flux-fill-pro.
+  EOT
+  type        = map(string)
+  default     = {}
+}
+
+# The model and its input field names are a pair. replicate_model_version can
+# be overridden from a GitHub repo variable without a commit, but backend_env
+# lives in ci.auto.tfvars -- so an override can leave the two describing
+# different models. That is not hypothetical: sending flux-fill-pro a
+# reference-image field it does not declare makes Replicate reject every
+# request, which is how production compositing broke.
+#
+# A check block warns on plan (and in the PR comment) rather than failing the
+# apply, because only the model's own schema is authoritative and this list
+# cannot stay exhaustive.
+locals {
+  # Models that accept image + mask + prompt and nothing else.
+  mask_only_models = [
+    "black-forest-labs/flux-fill-pro",
+    "black-forest-labs/flux-fill-dev",
+  ]
+
+  model_is_mask_only   = contains(local.mask_only_models, var.replicate_model_version)
+  reference_field_sent = lookup(var.backend_env, "REPLICATE_FIELD_REFERENCE", "ip_adapter_image") != ""
+}
+
+check "model_field_mapping" {
+  assert {
+    condition     = !(local.model_is_mask_only && local.reference_field_sent)
+    error_message = <<-EOT
+      ${var.replicate_model_version} is mask-only, but backend_env does not
+      blank REPLICATE_FIELD_REFERENCE. The backend will send a reference-image
+      field the model does not declare and Replicate will reject every
+      composite request. Set REPLICATE_FIELD_REFERENCE = "" in
+      terraform/ci.auto.tfvars, or switch to a reference-capable model.
+    EOT
+  }
 }

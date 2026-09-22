@@ -1,20 +1,12 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const { getSuggestions } = require('../services/suggestionEngine');
+const { uploadExists } = require('../services/uploadStore');
 
 const router = express.Router();
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 
 const VALID_SPACE_TYPES = ['bedside_table', 'bed', 'bedroom_corner'];
 const VALID_BUDGETS = ['budget', 'mid', 'premium', 'any'];
 const VALID_STYLES = ['modern', 'rustic', 'minimalist', 'any'];
-
-function uploadExists(uploadId) {
-  if (!uploadId || typeof uploadId !== 'string') return false;
-  const files = fs.readdirSync(UPLOAD_DIR);
-  return files.some((f) => f.startsWith(uploadId));
-}
 
 router.post('/', (req, res) => {
   const { upload_id: uploadId, space_type: spaceType, budget, style } = req.body || {};

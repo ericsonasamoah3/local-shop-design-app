@@ -8,3 +8,24 @@ backend/composites/*
 .env
 *.log
 terraform/.terraform/
+
+# Terraform state contains SSM SecureString values in PLAINTEXT, and tfvars
+# files hold the values you pass in. Neither belongs in git.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+# Exception: non-secret deployment config (which model, which input fields,
+# rate limits). CI cannot see terraform.tfvars, so config kept only there
+# reverts to defaults on every deploy. Keys stay out of this file -- see the
+# header in terraform/ci.auto.tfvars.
+!terraform/ci.auto.tfvars
+.terraform.lock.hcl.bak
+
+# Saved plan files -- contain the full resolved config, including secrets.
+tfplan
+*.tfplan
+
+# Claude Code tooling, not part of the app.
+.claude/
+skills-lock.json

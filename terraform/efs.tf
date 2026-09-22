@@ -15,7 +15,7 @@ resource "aws_efs_file_system" "media" {
 }
 
 resource "aws_efs_mount_target" "media" {
-  count           = length(aws_subnet.public)
+  count           = length(var.availability_zones)
   file_system_id  = aws_efs_file_system.media.id
   subnet_id       = aws_subnet.public[count.index].id
   security_groups = [aws_security_group.efs.id]

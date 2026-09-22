@@ -1,21 +1,24 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+
+const { UPLOAD_DIR, MIME_TO_EXTENSION } = require('../services/uploadStore');
 
 const router = express.Router();
 
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME_TYPES = Object.keys(MIME_TO_EXTENSION);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
     const uploadId = uuidv4();
     req.generatedUploadId = uploadId;
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `${uploadId}${ext}`);
+    // The extension comes from the MIME type fileFilter already validated, not
+    // from the client-supplied filename. Deriving it from originalname would
+    // let a caller choose the extension of a file we then serve back from
+    // /uploads, since the browser picks the mimetype too.
+    cb(null, `${uploadId}${MIME_TO_EXTENSION[file.mimetype]}`);
   },
 });
 
@@ -47,11 +50,11 @@ router.post('/', (req, res) => {
     }
 
     const uploadId = req.generatedUploadId;
-    const filename = path.basename(req.file.path);
+    const extension = MIME_TO_EXTENSION[req.file.mimetype];
 
     res.status(200).json({
       upload_id: uploadId,
-      image_url: `/uploads/${filename}`,
+      image_url: `/uploads/${uploadId}${extension}`,
       created_at: new Date().toISOString(),
     });
   });

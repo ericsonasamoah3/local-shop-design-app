@@ -19,15 +19,18 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
 }
 
 resource "aws_iam_role_policy" "ecs_execution_ssm" {
-  name = "read-replicate-token"
+  name = "read-model-api-secrets"
   role = aws_iam_role.ecs_execution.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["ssm:GetParameters"]
-      Resource = [aws_ssm_parameter.replicate_api_token.arn]
+      Effect = "Allow"
+      Action = ["ssm:GetParameters"]
+      Resource = concat(
+        [aws_ssm_parameter.replicate_api_token.arn],
+        var.anthropic_api_key == "" ? [] : [aws_ssm_parameter.anthropic_api_key[0].arn],
+      )
     }]
   })
 }
@@ -116,7 +119,7 @@ resource "aws_iam_role" "github_actions" {
           # Restrict to this repo, any branch/PR. Tighten further to
           # "repo:ORG/REPO:ref:refs/heads/main" if you only ever want
           # main to be able to assume this role.
-          "token.actions.githubusercontent.com:sub" = "repo:ericsonasamoah3@84795350/local-shop-design-app@1334094868:*"
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
         }
       }
     }]

@@ -4,18 +4,34 @@ import IntakeForm from './components/IntakeForm.jsx';
 import SuggestionList from './components/SuggestionList.jsx';
 import MaskCanvas from './components/MaskCanvas.jsx';
 import CompositePreview from './components/CompositePreview.jsx';
+import CompositeTimeline from './components/CompositeTimeline.jsx';
 import { getSuggestions, createComposite, pollComposite } from './api/client';
+
+const ORIGINAL = 'original';
 
 export default function App() {
   const [upload, setUpload] = useState(null); // { upload_id, image_url }
   const [suggestState, setSuggestState] = useState({ status: 'idle', suggestions: [], message: null, error: null });
-  const [pendingProductId, setPendingProductId] = useState(null); // product awaiting mask
-  const [compositeState, setCompositeState] = useState({ status: null, url: null, error: null });
+  const [pendingProduct, setPendingProduct] = useState(null); // product awaiting a mask
+
+  // Every version of the room, oldest first. layers[0] is always the upload.
+  // Compositing appends, so the user builds a scene up one item at a time
+  // rather than starting over from the bare photo on every attempt.
+  const [layers, setLayers] = useState([]);
+  const [activeLayerId, setActiveLayerId] = useState(ORIGINAL);
+  const [composite, setComposite] = useState({ status: null, error: null, notes: null });
+
+  const activeLayer = layers.find((l) => l.id === activeLayerId) || layers[0];
+
+  function handleUploaded(result) {
+    setUpload(result);
+    setLayers([{ id: ORIGINAL, url: result.image_url, label: 'Your photo', notes: null }]);
+    setActiveLayerId(ORIGINAL);
+  }
 
   async function handleIntakeSubmit({ spaceType, budget, style }) {
     setSuggestState({ status: 'loading', suggestions: [], message: null, error: null });
-    setCompositeState({ status: null, url: null, error: null });
-    setPendingProductId(null);
+    setPendingProduct(null);
 
     try {
       const result = await getSuggestions({ uploadId: upload.upload_id, spaceType, budget, style });
@@ -30,37 +46,58 @@ export default function App() {
     }
   }
 
-  // Step 1: user picks a suggestion — this just opens the mask-drawing step,
-  // it doesn't call the API yet.
-  function handleSelectSuggestion(productId) {
-    setCompositeState({ status: null, url: null, error: null });
-    setPendingProductId(productId);
+  // Step 1: picking a suggestion opens the mask step. No API call yet.
+  function handleSelectSuggestion(product) {
+    setComposite({ status: null, error: null, notes: null });
+    setPendingProduct(product);
   }
 
-  // Step 2: user draws a mask — now we actually kick off the composite job
-  // and poll until it's done.
+  // Step 2: the mask is drawn, so start the job — layered onto whichever
+  // version of the room is currently selected.
   async function handleMaskReady(maskDataUri) {
-    const productId = pendingProductId;
-    setPendingProductId(null);
-    setCompositeState({ status: 'processing', url: null, error: null });
+    const product = pendingProduct;
+    setPendingProduct(null);
+    setComposite({ status: 'processing', error: null, notes: null, label: product.name });
 
     try {
       const { composite_id: compositeId } = await createComposite({
         uploadId: upload.upload_id,
-        productId,
+        productId: product.product_id,
         maskDataUri,
+        baseCompositeId: activeLayerId === ORIGINAL ? null : activeLayerId,
       });
       const result = await pollComposite(compositeId);
 
       if (result.status === 'complete') {
-        setCompositeState({ status: 'complete', url: result.composite_url, error: null });
+        const layer = {
+          id: result.composite_id,
+          url: result.composite_url,
+          label: product.name,
+          notes: result.notes || null,
+        };
+        // Branching off an older frame discards the versions that came after
+        // it, so the timeline stays a single readable history.
+        setLayers((prev) => {
+          const from = prev.findIndex((l) => l.id === activeLayerId);
+          return [...prev.slice(0, from + 1), layer];
+        });
+        setActiveLayerId(layer.id);
+        setComposite({ status: 'complete', error: null, notes: layer.notes });
       } else {
-        setCompositeState({ status: 'failed', url: null, error: result.error });
+        setComposite({ status: 'failed', error: result.error, notes: result.notes || null });
       }
     } catch (err) {
-      setCompositeState({ status: 'failed', url: null, error: err.message });
+      setComposite({ status: 'failed', error: err.message, notes: null });
     }
   }
+
+  function handleSelectLayer(layerId) {
+    setActiveLayerId(layerId);
+    setPendingProduct(null);
+    setComposite({ status: null, error: null, notes: null });
+  }
+
+  const hasSuggestions = suggestState.status === 'idle' && (suggestState.suggestions.length > 0 || suggestState.message);
 
   return (
     <div className="site">
@@ -73,7 +110,7 @@ export default function App() {
 
       <section className="hero">
         <div className="hero__inner">
-          <div>
+          <div className="reveal">
             <p className="hero__eyebrow">Phase 2 · bedding</p>
             <h1>
               Empty space.<br />
@@ -84,9 +121,9 @@ export default function App() {
               and we'll pull real pieces from shops near you to fill it in.
             </p>
             <ul className="steps">
-              <li><span className="num">01</span> Drop a photo of the space</li>
-              <li><span className="num">02</span> Tell us the budget and style</li>
-              <li><span className="num">03</span> Mark where it goes and preview</li>
+              <li style={{ '--i': 0 }}><span className="num">01</span> Drop a photo of the space</li>
+              <li style={{ '--i': 1 }}><span className="num">02</span> Tell us the budget and style</li>
+              <li style={{ '--i': 2 }}><span className="num">03</span> Mark where it goes and preview</li>
             </ul>
           </div>
           <div className="hero__visual" aria-hidden="true">
@@ -100,11 +137,11 @@ export default function App() {
       </section>
 
       <main>
-        <section className="section">
+        <section className="section reveal">
           <p className="section__eyebrow"><span className="num">1</span> Drop a photo</p>
           <h2>Show us the space</h2>
 
-          {!upload && <UploadForm onUploaded={setUpload} />}
+          {!upload && <UploadForm onUploaded={handleUploaded} />}
 
           {upload && (
             <div className="uploaded-preview">
@@ -115,41 +152,72 @@ export default function App() {
         </section>
 
         {suggestState.status === 'error' && (
-          <section className="section">
+          <section className="section reveal">
             <p role="alert">Couldn't load suggestions right now. Please try again.</p>
           </section>
         )}
 
-        {suggestState.status === 'idle' && (suggestState.suggestions.length > 0 || suggestState.message) && (
-          <section className="section">
+        {hasSuggestions && (
+          <section className="section reveal">
             <p className="section__eyebrow"><span className="num">2</span> Local picks</p>
             <h2>What we found nearby</h2>
             <SuggestionList
               suggestions={suggestState.suggestions}
               message={suggestState.message}
               onSelect={handleSelectSuggestion}
-              selectingProductId={pendingProductId}
+              selectingProductId={pendingProduct ? pendingProduct.product_id : null}
             />
           </section>
         )}
 
-        {pendingProductId && (
-          <section className="section">
-            <p className="section__eyebrow"><span className="num">3</span> Mark the spot</p>
-            <h2>Where should it go?</h2>
-            <MaskCanvas imageUrl={upload.image_url} onMaskReady={handleMaskReady} />
+        {layers.length > 1 && (
+          <section className="section reveal">
+            <p className="section__eyebrow"><span className="num">★</span> Your versions</p>
+            <h2>Every step, side by side</h2>
+            <p className="section__hint">
+              Each frame is the room after one addition. Pick any of them to keep building from
+              that point — you don't have to start over.
+            </p>
+            <CompositeTimeline
+              layers={layers}
+              activeLayerId={activeLayerId}
+              pending={composite.status === 'processing' ? { label: composite.label } : null}
+              onSelect={handleSelectLayer}
+            />
           </section>
         )}
 
-        {compositeState.status && (
-          <section className="section">
+        {pendingProduct && activeLayer && (
+          <section className="section reveal">
+            <p className="section__eyebrow"><span className="num">3</span> Mark the spot</p>
+            <h2>Where should the {pendingProduct.name.toLowerCase()} go?</h2>
+            {activeLayerId !== ORIGINAL && (
+              <p className="section__hint">Adding to your composited version, not the bare photo.</p>
+            )}
+            {/* Keyed on the image so the drawn box resets when the base changes. */}
+            <MaskCanvas
+              key={activeLayer.url}
+              imageUrl={activeLayer.url}
+              onMaskReady={handleMaskReady}
+            />
+          </section>
+        )}
+
+        {composite.status && (
+          <section className="section reveal">
             <p className="section__eyebrow"><span className="num">4</span> Preview</p>
             <h2>Your space, filled in</h2>
             <CompositePreview
-              status={compositeState.status}
-              compositeUrl={compositeState.url}
-              error={compositeState.error}
+              status={composite.status}
+              compositeUrl={composite.status === 'complete' && activeLayer ? activeLayer.url : null}
+              error={composite.error}
+              notes={composite.notes}
             />
+            {composite.status === 'complete' && (
+              <p className="section__hint">
+                Happy with it? Pick another item above and it'll be added to this version.
+              </p>
+            )}
           </section>
         )}
       </main>

@@ -1,9 +1,13 @@
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster"
 
+  # Disabled deliberately: Container Insights publishes CloudWatch custom
+  # metrics that are billed per metric per month and can easily cost more
+  # than the two tasks it is watching. The awslogs groups below are the
+  # cheap way to see what these services are doing.
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
   }
 }
 
@@ -13,12 +17,12 @@ resource "aws_service_discovery_http_namespace" "main" {
 
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${var.project_name}-backend"
-  retention_in_days = 14
+  retention_in_days = 3
 }
 
 resource "aws_cloudwatch_log_group" "frontend" {
   name              = "/ecs/${var.project_name}-frontend"
-  retention_in_days = 14
+  retention_in_days = 3
 }
 
 # --- Backend ---
@@ -58,7 +62,7 @@ resource "aws_ecs_task_definition" "backend" {
 
   container_definitions = jsonencode([
     {
-      name      = "backend"
+      name = "backend"
       # Placeholder tag — GitHub Actions overwrites this with the real
       # image URI on every deploy via `aws ecs register-task-definition`.
       image     = "${aws_ecr_repository.backend.repository_url}:latest"
@@ -70,6 +74,16 @@ resource "aws_ecs_task_definition" "backend" {
           name          = "backend"
         }
       ]
+      # Replaces what the ALB target group health check used to do: with
+      # no load balancer watching, this is what makes ECS notice a wedged
+      # container and cycle the task. busybox wget ships in node:20-alpine.
+      healthCheck = {
+        command     = ["CMD-SHELL", "wget -q -O /dev/null http://localhost:${var.backend_container_port}/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
       # Mounted at the exact paths your Dockerfile/app already use for
       # the Compose bind mounts (/app/uploads, /app/composites) — no
       # code changes needed. Adjust these two paths if your Dockerfile
@@ -84,16 +98,29 @@ resource "aws_ecs_task_definition" "backend" {
           containerPath = "/app/composites"
         }
       ]
-      environment = [
-        { name = "PORT", value = tostring(var.backend_container_port) },
-        { name = "REPLICATE_MODEL_VERSION", value = var.replicate_model_version },
-      ]
-      secrets = [
-        {
-          name      = "REPLICATE_API_TOKEN"
-          valueFrom = aws_ssm_parameter.replicate_api_token.arn
-        }
-      ]
+      environment = concat(
+        [
+          { name = "PORT", value = tostring(var.backend_container_port) },
+          { name = "REPLICATE_MODEL_VERSION", value = var.replicate_model_version },
+        ],
+        [for k, v in var.backend_env : { name = k, value = v }]
+      )
+      # Claude is optional, so its secret is only wired in when a key was
+      # supplied. Without it the backend uses the template planning path.
+      secrets = concat(
+        [
+          {
+            name      = "REPLICATE_API_TOKEN"
+            valueFrom = aws_ssm_parameter.replicate_api_token.arn
+          }
+        ],
+        var.anthropic_api_key == "" ? [] : [
+          {
+            name      = "ANTHROPIC_API_KEY"
+            valueFrom = aws_ssm_parameter.anthropic_api_key[0].arn
+          }
+        ]
+      )
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -165,6 +192,15 @@ resource "aws_ecs_task_definition" "frontend" {
           name          = "frontend"
         }
       ]
+      # Same reasoning as the backend: no ALB health check any more, so the
+      # container reports its own liveness. busybox wget ships in nginx:alpine.
+      healthCheck = {
+        command     = ["CMD-SHELL", "wget -q -O /dev/null http://localhost:${var.frontend_container_port}/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 20
+      }
       # No BACKEND_HOST/PORT env vars needed here — nginx.conf already
       # proxies to backend:3001 unchanged, and Service Connect below
       # resolves that exact hostname:port, same as Docker Compose does.
@@ -199,17 +235,17 @@ resource "aws_ecs_service" "frontend" {
     namespace = aws_service_discovery_http_namespace.main.arn
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
-    container_name   = "frontend"
-    container_port   = var.frontend_container_port
-  }
-
-  depends_on = [aws_lb_listener.http]
-
   lifecycle {
     ignore_changes = [task_definition, desired_count]
   }
+}
+
+resource "aws_ssm_parameter" "anthropic_api_key" {
+  count = var.anthropic_api_key == "" ? 0 : 1
+
+  name  = "/${var.project_name}/anthropic_api_key"
+  type  = "SecureString"
+  value = var.anthropic_api_key
 }
 
 resource "aws_ssm_parameter" "replicate_api_token" {

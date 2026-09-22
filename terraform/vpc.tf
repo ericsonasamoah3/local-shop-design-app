@@ -16,9 +16,11 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Public subnets only — Fargate tasks get public IPs directly, no NAT
-# gateway. Cheaper and simpler at this scale; revisit if you need
-# tasks to have no public exposure at all (add private subnets + NAT).
+# Public subnets only -- Fargate tasks get public IPs directly, no NAT
+# gateway. Since the ALB was removed, the frontend task's own public IP
+# is the entry point, so a single AZ is enough (an ALB would have
+# required two). Add AZs back to var.availability_zones if you
+# reintroduce a load balancer.
 resource "aws_subnet" "public" {
   count                   = length(var.availability_zones)
   vpc_id                  = aws_vpc.main.id
@@ -45,42 +47,27 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  count          = length(aws_subnet.public)
+  count          = length(var.availability_zones)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-alb-sg"
-  description = "Allow inbound HTTP to the ALB"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
-  description = "Allow traffic from the ALB and between services"
+  description = "Allow public traffic to the frontend and traffic between services"
   vpc_id      = aws_vpc.main.id
 
+  # Was "from the ALB security group". With no ALB in front, the
+  # frontend task is hit directly, so this opens its port to the
+  # internet. Narrow cidr_blocks to your own IP if you only ever reach
+  # this yourself -- the app has no auth and /api/composite spends
+  # Anthropic and Replicate credits per call.
   ingress {
-    description     = "From ALB to frontend"
-    from_port       = var.frontend_container_port
-    to_port         = var.frontend_container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+    description = "Public HTTP to frontend"
+    from_port   = var.frontend_container_port
+    to_port     = var.frontend_container_port
+    protocol    = "tcp"
+    cidr_blocks = var.frontend_allowed_cidrs
   }
 
   ingress {

@@ -12,6 +12,8 @@ export default function SuggestionList({ suggestions, message, onSelect, selecti
     return acc;
   }, {});
 
+  let n = 0;
+
   return (
     <div>
       {Object.entries(grouped).map(([category, items]) => (
@@ -19,7 +21,8 @@ export default function SuggestionList({ suggestions, message, onSelect, selecti
           <h3 className="category-group__label">{category}</h3>
           <ul className="tag-grid">
             {items.map((item) => (
-              <li key={item.product_id} className="swing-tag">
+              // --i drives the entrance stagger in styles.css
+              <li key={item.product_id} className="swing-tag" style={{ '--i': n++ }}>
                 {item.shop_source_type === 'local' && <span className="stamp">Local</span>}
                 <img className="swing-tag__image" src={item.image_url} alt={item.name} />
                 <p className="swing-tag__name">{item.name}</p>
@@ -27,10 +30,10 @@ export default function SuggestionList({ suggestions, message, onSelect, selecti
                 <p className="swing-tag__shop">{item.shop_name}</p>
                 <button
                   className="btn"
-                  onClick={() => onSelect(item.product_id)}
+                  onClick={() => onSelect(item)}
                   disabled={selectingProductId === item.product_id}
                 >
-                  {selectingProductId === item.product_id ? 'Generating…' : 'Preview in my space'}
+                  {selectingProductId === item.product_id ? 'Mark the spot…' : 'Preview in my space'}
                 </button>
               </li>
             ))}

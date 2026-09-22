@@ -1,0 +1,14 @@
+# Same reasoning as the backend: never ship the host's node_modules into the
+# build stage, which runs its own npm install.
+node_modules
+npm-debug.log*
+
+# Build output is produced inside the image by `npm run build`.
+dist
+
+.env
+.env.*
+*.log
+
+Dockerfile
+.dockerignore

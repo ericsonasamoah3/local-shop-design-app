@@ -1,6 +1,15 @@
-output "alb_dns_name" {
-  value       = aws_lb.main.dns_name
-  description = "Public URL of the app (add this as an A/CNAME record if you use a domain)"
+# The ALB is gone, so there is no longer a stable hostname for the app.
+# The frontend task's public IP is the entry point, and it changes on
+# every deployment and every task replacement -- so it cannot be a
+# Terraform output. Run this to find the current one.
+output "app_url_command" {
+  description = "Shell command that prints the current frontend URL"
+  value       = <<-EOT
+    aws ecs list-tasks --cluster ${aws_ecs_cluster.main.name} --service-name ${aws_ecs_service.frontend.name} --region ${var.aws_region} --query 'taskArns[0]' --output text \
+      | xargs -I {} aws ecs describe-tasks --cluster ${aws_ecs_cluster.main.name} --tasks {} --region ${var.aws_region} --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text \
+      | xargs -I {} aws ec2 describe-network-interfaces --network-interface-ids {} --region ${var.aws_region} --query 'NetworkInterfaces[0].Association.PublicIp' --output text \
+      | xargs -I {} echo "http://{}:${var.frontend_container_port}"
+  EOT
 }
 
 output "ecr_backend_repo_url" {

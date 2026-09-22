@@ -1,4 +1,4 @@
-const catalog = require('../data/catalog.seed.json');
+const { getCatalog } = require('./catalogStore');
 
 // Phase 1: hardcoded rules, not ML. See CLAUDE.md section 5.
 
@@ -10,11 +10,11 @@ const CATEGORIES_BY_SPACE_TYPE = {
 };
 
 function shopById(shopId) {
-  return catalog.shops.find((s) => s.id === shopId);
+  return getCatalog().shops.find((s) => s.id === shopId);
 }
 
 function pickForCategory(category, budget, style) {
-  const itemsInCategory = catalog.products.filter((p) => p.category === category);
+  const itemsInCategory = getCatalog().products.filter((p) => p.category === category);
   if (itemsInCategory.length === 0) return [];
 
   if (budget === 'any') {
@@ -77,7 +77,7 @@ function getSuggestions({ spaceType, budget, style }) {
 }
 
 function getProductById(productId) {
-  return catalog.products.find((p) => p.id === productId) || null;
+  return getCatalog().products.find((p) => p.id === productId) || null;
 }
 
 module.exports = { getSuggestions, getProductById };

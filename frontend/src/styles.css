@@ -28,12 +28,18 @@
   --radius-tag: 4px;
   --shadow-card: 0 3px 0 rgba(28, 27, 23, 0.08), 0 8px 20px rgba(28, 27, 23, 0.12);
   --max-width: 1080px;
+
+  /* Motion curves. The built-in CSS easings are too weak for UI, so these are
+     the strong equivalents: ease-out for entering and exiting, ease-in-out for
+     movement across the screen. Never ease-in on UI. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   :root {
     --transition-fast: 140ms ease;
-    --transition-lift: 220ms cubic-bezier(0.2, 0.7, 0.3, 1);
+    --transition-lift: 220ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -540,20 +546,20 @@ button {
   margin: 0;
 }
 .mask-canvas__stage {
+  /* Sized by the photo itself. A fixed height plus object-fit: cover would
+     crop the image, and the mask maps coordinates straight back onto the
+     full-size photo — so a crop puts the composite in the wrong place. */
   position: relative;
   width: 480px;
   max-width: 100%;
-  height: 480px;
   border-radius: 6px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
 }
 .mask-canvas__image {
-  position: absolute;
-  inset: 0;
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
 }
 .mask-canvas__overlay {
   position: absolute;
@@ -592,4 +598,258 @@ button {
   font-family: var(--font-mono);
   color: var(--clay);
   font-size: 13px;
+}
+
+.polaroid__note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--moss-deep);
+  text-align: center;
+  margin-top: 6px;
+  opacity: 0.85;
+}
+
+
+/* ============================================================
+   MOTION
+
+   Gate (frequency -> licence):
+     button press, card hover .... tens/day   -> near-imperceptible only
+     section + card entrances .... occasional -> standard animation
+     timeline frames ............. occasional -> standard animation
+     composite reveal ............ rare, once per 30-60s wait -> delight budget
+
+   Held to: transform/opacity/clip-path only; UI under 300ms; strong custom
+   curves, never the built-ins; hover motion gated behind a real pointer;
+   reduced motion is gentler, not absent.
+   ============================================================ */
+
+@keyframes rise {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes frame-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The composite arriving. clip-path is the sanctioned fourth property, and a
+   wipe reads as a print coming up in a developer tray — which is close to
+   what actually happened. This is the one long animation in the app and it
+   earns it: the user waited 30-60 seconds for this frame and sees it once. */
+@keyframes develop {
+  from { clip-path: inset(0 0 100% 0); opacity: 0.4; transform: scale(1.015); }
+  to   { clip-path: inset(0 0 0 0);    opacity: 1;   transform: none; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+@keyframes sheen {
+  from { transform: translate3d(-120%, 0, 0); }
+  to   { transform: translate3d(220%, 0, 0); }
+}
+
+/* Occasional surfaces. 260ms sits under the UI ceiling. */
+.reveal {
+  animation: rise 260ms var(--ease-out) both;
+}
+
+/* Stagger: 45ms is inside the 30-80ms band, capped so a long list's last item
+   is never late. Decorative, and never blocks interaction while it plays. */
+.steps li,
+.swing-tag {
+  animation: rise 260ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms);
+}
+
+/* Press feedback. A transition, not keyframes — a button can be fired twice
+   in a second and must retarget from wherever it currently is. */
+.btn {
+  transition: transform 160ms var(--ease-out), background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.btn:active:not(:disabled) { transform: scale(0.97); }
+
+.swing-tag {
+  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+/* Hover motion is gated: touch fires a false hover on tap, which otherwise
+   leaves a card stuck in its lifted state after the finger lifts. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .swing-tag:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 0 rgba(28, 27, 23, 0.08), 0 14px 28px rgba(28, 27, 23, 0.16);
+  }
+  .timeline__frame:hover { transform: translateY(-2px); }
+}
+
+.polaroid img {
+  animation: develop 600ms var(--ease-in-out) both;
+}
+
+.polaroid--pending .polaroid__caption {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
+   TIMELINE — the exploded view of every version of the room
+   ============================================================ */
+
+.timeline { margin-top: 18px; }
+
+.timeline__track {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 4px 4px 14px;
+  margin: 0;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.timeline__item {
+  position: relative;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  animation: frame-in 260ms var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms);
+}
+
+/* Connector, so the row reads as a sequence rather than a gallery. */
+.timeline__item + .timeline__item::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 62px;
+  width: 14px;
+  border-top: 1px dashed var(--kraft-dark);
+}
+
+.timeline__frame {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 132px;
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid var(--kraft-dark);
+  border-radius: var(--radius-tag);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  transition: transform 200ms var(--ease-out), border-color var(--transition-fast),
+    box-shadow 200ms var(--ease-out);
+}
+.timeline__frame:active { transform: scale(0.98); }
+
+.timeline__item--active .timeline__frame {
+  border-color: var(--ochre);
+  box-shadow: 0 0 0 2px rgba(201, 138, 46, 0.28);
+}
+
+.timeline__step {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--moss-deep);
+}
+
+.timeline__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 2px;
+  background: var(--kraft);
+}
+
+/* The frame that does not exist yet. A shimmer shaped like the result beats a
+   spinner: it says what is coming and reserves the space, so nothing shifts
+   when the image lands. */
+.timeline__placeholder {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 2px;
+  background: var(--kraft);
+  overflow: hidden;
+}
+.timeline__placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: sheen 1.2s linear infinite;
+}
+
+.timeline__item--pending .timeline__frame {
+  border-style: dashed;
+  cursor: default;
+}
+
+.timeline__label {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.timeline__notes {
+  margin: 4px 2px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--moss-deep);
+  animation: rise 260ms var(--ease-out) both;
+}
+
+.section__hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--moss-deep);
+  max-width: 62ch;
+}
+
+/* ============================================================
+   Reduced motion: gentler, not absent. Opacity still communicates that
+   something arrived; movement, scale and the looping shimmer go away.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes rise     { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes frame-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes develop  { from { opacity: 0; } to { opacity: 1; } }
+
+  .reveal,
+  .steps li,
+  .swing-tag,
+  .timeline__item,
+  .timeline__notes,
+  .polaroid img {
+    animation-duration: 200ms;
+    animation-delay: 0ms;
+  }
+
+  .polaroid--pending .polaroid__caption,
+  .timeline__placeholder::after {
+    animation: none;
+  }
+
+  .btn:active:not(:disabled),
+  .timeline__frame:active {
+    transform: none;
+  }
 }
