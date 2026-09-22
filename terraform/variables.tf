@@ -142,3 +142,17 @@ check "model_field_mapping" {
     EOT
   }
 }
+
+# GitHub's immutable OIDC claims embed these numeric ids in the subject, so the
+# role trust policy needs them. They never change -- not on a rename, not on a
+# transfer, which is the point. Find them with:
+#   gh api repos/OWNER/REPO --jq '"\(.owner.id) \(.id)"'
+variable "github_owner_id" {
+  description = "Numeric GitHub account id, used in the immutable OIDC subject claim"
+  type        = string
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository id, used in the immutable OIDC subject claim"
+  type        = string
+}

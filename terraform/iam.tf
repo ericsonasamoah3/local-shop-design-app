@@ -117,9 +117,29 @@ resource "aws_iam_role" "github_actions" {
         }
         StringLike = {
           # Restrict to this repo, any branch/PR. Tighten further to
-          # "repo:ORG/REPO:ref:refs/heads/main" if you only ever want
+          # ":ref:refs/heads/main" on both entries if you only ever want
           # main to be able to assume this role.
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          #
+          # TWO forms, because GitHub changed the subject claim. It now issues
+          # IMMUTABLE claims that embed numeric ids:
+          #
+          #   repo:owner@84795350/repo@1334094868:ref:refs/heads/main
+          #
+          # rather than the old repo:owner/repo:ref/... . The ids sit in the
+          # MIDDLE of the string, so a pattern wildcarded only at the end stops
+          # matching entirely and every workflow fails at the AWS login step
+          # with "Not authorized to perform sts:AssumeRoleWithWebIdentity".
+          # That is exactly what happened on 2026-09-22; CloudTrail's
+          # userIdentity.userName shows the claim actually sent.
+          #
+          # StringLike over a list is OR, so both forms are accepted and the
+          # trust survives GitHub rolling the change forward or back. The ids
+          # are immutable: renaming the repo or the account does NOT hand trust
+          # to whoever claims the old name, which is the point of the change.
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_org}/${var.github_repo}:*",
+            "repo:${var.github_org}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:*",
+          ]
         }
       }
     }]

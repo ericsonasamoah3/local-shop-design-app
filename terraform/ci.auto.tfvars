@@ -30,3 +30,8 @@ backend_env = {
   RATE_LIMIT_MAX       = "20"
   RATE_LIMIT_WINDOW_MS = "3600000"
 }
+
+# Numeric GitHub ids for the immutable OIDC subject claim (see iam.tf).
+# Not secret -- they are returned by the public repos API.
+github_owner_id = "84795350"
+github_repo_id  = "1334094868"
