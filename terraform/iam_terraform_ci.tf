@@ -74,6 +74,38 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
         Resource = "*"
       },
 
+      # The HTTPS entry point (https.tf). API Gateway's IAM model is
+      # verb-on-path: the actions are HTTP methods and the resources are
+      # the REST paths of its own management API.
+      {
+        Sid      = "ManageApiGateway"
+        Effect   = "Allow"
+        Action   = ["apigateway:GET", "apigateway:POST", "apigateway:PUT", "apigateway:PATCH", "apigateway:DELETE", "apigateway:TagResource", "apigateway:UntagResource"]
+        Resource = "arn:aws:apigateway:${var.aws_region}::/*"
+      },
+      # Cloud Map's private DNS namespace is a Route 53 private hosted zone
+      # under the hood; servicediscovery:* alone is not enough to create it.
+      {
+        Sid    = "CloudMapPrivateDns"
+        Effect = "Allow"
+        Action = [
+          "route53:CreateHostedZone",
+          "route53:DeleteHostedZone",
+          "route53:GetHostedZone",
+          "route53:ListHostedZonesByName",
+          "route53:ChangeResourceRecordSets",
+          "route53:ListResourceRecordSets",
+          "route53:GetChange",
+          "route53:AssociateVPCWithHostedZone",
+          "route53:DisassociateVPCFromHostedZone",
+          "route53:CreateHealthCheck",
+          "route53:DeleteHealthCheck",
+          "route53:GetHealthCheck",
+          "route53:UpdateHealthCheck",
+        ]
+        Resource = "*"
+      },
+
       # Secrets. Scoped to this project's parameter path.
       {
         Sid    = "ManageParameters"
@@ -161,6 +193,8 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
             "iam:AWSServiceName" = [
               "ecs.amazonaws.com",
               "elasticfilesystem.amazonaws.com",
+              # VPC links need API Gateway's service-linked role.
+              "ops.apigateway.amazonaws.com",
             ]
           }
         }

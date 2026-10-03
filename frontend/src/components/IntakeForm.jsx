@@ -20,7 +20,9 @@ const STYLES = [
   { value: 'minimalist', label: 'Minimalist' },
 ];
 
-export default function IntakeForm({ onSubmit, submitting }) {
+// children render just above the submit button — App puts the location
+// picker there, so it reads as part of the same form.
+export default function IntakeForm({ onSubmit, submitting, children }) {
   const [spaceType, setSpaceType] = useState('bed');
   const [budget, setBudget] = useState('mid');
   const [style, setStyle] = useState('any');
@@ -70,6 +72,8 @@ export default function IntakeForm({ onSubmit, submitting }) {
           placeholder="e.g. just moved in"
         />
       </div>
+
+      {children}
 
       <button className="btn" type="submit" disabled={submitting}>
         {submitting ? 'Finding suggestions…' : 'Get suggestions'}

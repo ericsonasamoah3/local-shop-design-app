@@ -27,7 +27,12 @@ export default function SuggestionList({ suggestions, message, onSelect, selecti
                 <img className="swing-tag__image" src={item.image_url} alt={item.name} />
                 <p className="swing-tag__name">{item.name}</p>
                 <p className="swing-tag__price">£{item.price.toFixed(2)}</p>
-                <p className="swing-tag__shop">{item.shop_name}</p>
+                <p className="swing-tag__shop">
+                  {item.shop_name}
+                  {item.distance_miles !== null && item.distance_miles !== undefined && (
+                    <span className="swing-tag__distance"> · {item.distance_miles} mi away</span>
+                  )}
+                </p>
                 <button
                   className="btn"
                   onClick={() => onSelect(item)}

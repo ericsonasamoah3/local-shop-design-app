@@ -11,14 +11,15 @@
 // restart and each instance limits independently. That is the right trade at
 // one task; put the counters in Redis before scaling out.
 //
-// This is a spend cap, not a security control. It does not replace narrowing
-// frontend_allowed_cidrs or putting real auth in front of the app.
+// This is a spend cap, not a security control. It does not replace putting
+// real auth in front of the app.
 
 const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000);
 const MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX || 20);
 
-// key -> { count, resetAt }
-const buckets = new Map();
+// One map per limiter, each key -> { count, resetAt }. Separate so that, say,
+// postcode lookups never use up a client's composite allowance.
+const allBuckets = new Set();
 
 // Without this the map grows one entry per unique client, forever. Cleared on
 // a timer rather than per-request so a flood cannot also drive the sweep.
@@ -26,8 +27,10 @@ const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 
 const sweep = setInterval(() => {
   const now = Date.now();
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
+  for (const buckets of allBuckets) {
+    for (const [key, bucket] of buckets) {
+      if (bucket.resetAt <= now) buckets.delete(key);
+    }
   }
 }, SWEEP_INTERVAL_MS);
 
@@ -42,12 +45,15 @@ if (typeof sweep.unref === 'function') sweep.unref();
  * (frontend/nginx.conf). Without reading that header, req.ip would be nginx's
  * own address for ALL users and the whole internet would share one bucket.
  *
- * Trusting the header is safe only because nginx is the sole route in: the ECS
- * security group exposes just the frontend port publicly, and the backend port
- * is reachable only from inside the group. It is spoofable by anything that
- * can talk to :3001 directly, which under docker-compose means the local host
- * — acceptable for development, but this must be revisited if the backend is
- * ever exposed, or if an ALB or CDN is put in front and adds another hop.
+ * In AWS there is one more hop: API Gateway sits in front of nginx and passes
+ * the visitor's IP in x-client-ip, which nginx swaps in as the peer address
+ * before setting X-Real-IP (frontend/nginx.conf, terraform/https.tf).
+ *
+ * Trusting the header is safe only because nginx is the sole route in: the
+ * frontend port admits only the API Gateway VPC link, and the backend port is
+ * reachable only from inside the group. It is spoofable by anything that can
+ * talk to :3001 directly, which under docker-compose means the local host —
+ * acceptable for development, but revisit this if the backend is ever exposed.
  */
 function clientKey(req) {
   const realIp = req.get('x-real-ip');
@@ -56,6 +62,9 @@ function clientKey(req) {
 }
 
 function rateLimit({ windowMs = WINDOW_MS, max = MAX_REQUESTS } = {}) {
+  const buckets = new Map();
+  allBuckets.add(buckets);
+
   return (req, res, next) => {
     // 0 disables the limiter, which is what local development wants.
     if (max <= 0) return next();

@@ -1,6 +1,7 @@
 const express = require('express');
 const { getSuggestions } = require('../services/suggestionEngine');
 const { uploadExists } = require('../services/uploadStore');
+const { parseLocation } = require('../services/geo');
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const VALID_BUDGETS = ['budget', 'mid', 'premium', 'any'];
 const VALID_STYLES = ['modern', 'rustic', 'minimalist', 'any'];
 
 router.post('/', (req, res) => {
-  const { upload_id: uploadId, space_type: spaceType, budget, style } = req.body || {};
+  const { upload_id: uploadId, space_type: spaceType, budget, style, lat, lon } = req.body || {};
 
   if (!uploadId || !spaceType || !budget) {
     return res.status(400).json({ error: 'missing_required_fields' });
@@ -31,7 +32,11 @@ router.post('/', (req, res) => {
     return res.status(404).json({ error: 'upload_not_found' });
   }
 
-  const result = getSuggestions({ spaceType, budget, style: style || 'any' });
+  // Optional. An absent or malformed location just means no distance
+  // ranking — it is a nicety, not a reason to fail the request.
+  const origin = parseLocation(lat, lon);
+
+  const result = getSuggestions({ spaceType, budget, style: style || 'any', origin });
 
   if (result.error) {
     return res.status(400).json({ error: result.error });

@@ -5,7 +5,9 @@ import SuggestionList from './components/SuggestionList.jsx';
 import MaskCanvas from './components/MaskCanvas.jsx';
 import CompositePreview from './components/CompositePreview.jsx';
 import CompositeTimeline from './components/CompositeTimeline.jsx';
-import { getSuggestions, createComposite, pollComposite } from './api/client';
+import LocationPicker from './components/LocationPicker.jsx';
+import ShopMap from './components/ShopMap.jsx';
+import { getSuggestions, getShops, createComposite, pollComposite } from './api/client';
 
 const ORIGINAL = 'original';
 
@@ -13,6 +15,12 @@ export default function App() {
   const [upload, setUpload] = useState(null); // { upload_id, image_url }
   const [suggestState, setSuggestState] = useState({ status: 'idle', suggestions: [], message: null, error: null });
   const [pendingProduct, setPendingProduct] = useState(null); // product awaiting a mask
+
+  // { lat, lon, label } or null. Kept for this visit only — never stored.
+  const [location, setLocation] = useState(null);
+  // The map's data. Loaded alongside suggestions; a failure here only costs
+  // the map, never the suggestions.
+  const [shopsState, setShopsState] = useState({ status: 'idle', shops: [] });
 
   // Every version of the room, oldest first. layers[0] is always the upload.
   // Compositing appends, so the user builds a scene up one item at a time
@@ -32,9 +40,14 @@ export default function App() {
   async function handleIntakeSubmit({ spaceType, budget, style }) {
     setSuggestState({ status: 'loading', suggestions: [], message: null, error: null });
     setPendingProduct(null);
+    setShopsState((prev) => ({ ...prev, status: 'loading' }));
+
+    getShops(location)
+      .then((data) => setShopsState({ status: 'idle', shops: data.shops || [] }))
+      .catch(() => setShopsState({ status: 'error', shops: [] }));
 
     try {
-      const result = await getSuggestions({ uploadId: upload.upload_id, spaceType, budget, style });
+      const result = await getSuggestions({ uploadId: upload.upload_id, spaceType, budget, style, location });
       setSuggestState({
         status: 'idle',
         suggestions: result.suggestions || [],
@@ -98,6 +111,7 @@ export default function App() {
   }
 
   const hasSuggestions = suggestState.status === 'idle' && (suggestState.suggestions.length > 0 || suggestState.message);
+  const featuredShopIds = new Set(suggestState.suggestions.map((s) => s.shop_id).filter(Boolean));
 
   return (
     <div className="site">
@@ -111,7 +125,7 @@ export default function App() {
       <section className="hero">
         <div className="hero__inner">
           <div className="reveal">
-            <p className="hero__eyebrow">Phase 2 · bedding</p>
+            <p className="hero__eyebrow">Phase 3 · bedding</p>
             <h1>
               Empty space.<br />
               Full cart. <em>All local.</em>
@@ -146,7 +160,9 @@ export default function App() {
           {upload && (
             <div className="uploaded-preview">
               <img src={upload.image_url} alt="Your uploaded space" />
-              <IntakeForm onSubmit={handleIntakeSubmit} submitting={suggestState.status === 'loading'} />
+              <IntakeForm onSubmit={handleIntakeSubmit} submitting={suggestState.status === 'loading'}>
+                <LocationPicker location={location} onChange={setLocation} />
+              </IntakeForm>
             </div>
           )}
         </section>
@@ -167,6 +183,29 @@ export default function App() {
               onSelect={handleSelectSuggestion}
               selectingProductId={pendingProduct ? pendingProduct.product_id : null}
             />
+          </section>
+        )}
+
+        {hasSuggestions && (
+          <section className="section reveal">
+            <p className="section__eyebrow"><span className="num">⌖</span> On the map</p>
+            <h2>Where these shops are</h2>
+            {shopsState.status === 'error' && (
+              <p className="empty-note">Couldn't load the shop map right now. Your picks above are unaffected.</p>
+            )}
+            {shopsState.status !== 'error' && shopsState.shops.length === 0 && shopsState.status === 'idle' && (
+              <p className="empty-note">No shop locations to show yet.</p>
+            )}
+            {shopsState.shops.length > 0 && (
+              <>
+                <p className="section__hint">
+                  {location
+                    ? 'Big ochre pins supplied your picks. Tap a pin for the address and distance.'
+                    : 'Big ochre pins supplied your picks. Add your location above to see how far each one is.'}
+                </p>
+                <ShopMap shops={shopsState.shops} userLocation={location} featuredShopIds={featuredShopIds} />
+              </>
+            )}
           </section>
         )}
 
@@ -224,7 +263,7 @@ export default function App() {
 
       <footer className="site-footer">
         <div className="site-footer__inner">
-          fillstock — phase 2 · real compositing · local shops soon
+          fillstock — phase 3 · real compositing · shops on the map
         </div>
       </footer>
     </div>

@@ -54,20 +54,23 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
+  # Out of date -- public traffic now arrives via API Gateway -- but AWS
+  # cannot edit a security group's description, and replacing a group that
+  # running tasks and EFS are attached to is not worth a corrected label.
   description = "Allow public traffic to the frontend and traffic between services"
   vpc_id      = aws_vpc.main.id
 
-  # Was "from the ALB security group". With no ALB in front, the
-  # frontend task is hit directly, so this opens its port to the
-  # internet. Narrow cidr_blocks to your own IP if you only ever reach
-  # this yourself -- the app has no auth and /api/composite spends
-  # Anthropic and Replicate credits per call.
+  # The only way in is the API Gateway VPC link (https.tf). The tasks keep
+  # public IPs because they need outbound internet with no NAT gateway, but
+  # nothing on the internet can reach them directly any more. That matters
+  # beyond tidiness: nginx trusts the x-client-ip header the spend cap keys
+  # on, and that is only safe while API Gateway is the sole route to it.
   ingress {
-    description = "Public HTTP to frontend"
-    from_port   = var.frontend_container_port
-    to_port     = var.frontend_container_port
-    protocol    = "tcp"
-    cidr_blocks = var.frontend_allowed_cidrs
+    description     = "HTTP from the API Gateway VPC link"
+    from_port       = var.frontend_container_port
+    to_port         = var.frontend_container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpc_link.id]
   }
 
   ingress {

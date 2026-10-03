@@ -28,17 +28,6 @@ variable "availability_zones" {
   default     = ["eu-north-1a"]
 }
 
-variable "frontend_allowed_cidrs" {
-  description = <<-EOT
-    Who may reach the frontend task directly. Defaults to the whole
-    internet, matching the old ALB. Set to a single "<your.ip>/32" entry
-    to keep the unauthenticated /api/composite endpoint, which spends
-    Anthropic and Replicate credits per call, off the public internet.
-  EOT
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
 variable "backend_container_port" {
   type    = number
   default = 3001

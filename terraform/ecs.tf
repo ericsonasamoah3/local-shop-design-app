@@ -235,6 +235,14 @@ resource "aws_ecs_service" "frontend" {
     namespace = aws_service_discovery_http_namespace.main.arn
   }
 
+  # Registers each task's IP and port in Cloud Map so API Gateway can find
+  # it (https.tf). This replaced the task's public IP as the entry point.
+  service_registries {
+    registry_arn   = aws_service_discovery_service.frontend.arn
+    container_name = "frontend"
+    container_port = var.frontend_container_port
+  }
+
   lifecycle {
     ignore_changes = [task_definition, desired_count]
   }

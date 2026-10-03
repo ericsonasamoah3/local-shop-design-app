@@ -26,7 +26,9 @@ export async function uploadImage(file) {
   return data;
 }
 
-export async function getSuggestions({ uploadId, spaceType, budget, style }) {
+// location is optional — { lat, lon } ranks suggestions nearest shop first
+// and adds distance_miles to each.
+export async function getSuggestions({ uploadId, spaceType, budget, style, location }) {
   const response = await fetch('/api/suggest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -35,6 +37,8 @@ export async function getSuggestions({ uploadId, spaceType, budget, style }) {
       space_type: spaceType,
       budget,
       style,
+      lat: location ? location.lat : undefined,
+      lon: location ? location.lon : undefined,
     }),
   });
 
@@ -95,4 +99,29 @@ export async function pollComposite(compositeId, { intervalMs = 2000, maxAttempt
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error('composite_timed_out');
+}
+
+// Every shop with coordinates, for the map. With a location, nearest first
+// and each carries distance_miles.
+export async function getShops(location) {
+  const params = location ? `?lat=${location.lat}&lon=${location.lon}` : '';
+  const response = await fetch(`/api/shops${params}`);
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'shops_failed');
+  }
+  return data; // { shops: [...] }
+}
+
+// Postcode or town to { lat, lon, label } — the fallback when the browser
+// cannot or may not share the user's location.
+export async function geocode(query) {
+  const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'geocoding_unavailable');
+  }
+  return data;
 }
