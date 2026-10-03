@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import UploadForm from './components/UploadForm.jsx';
 import IntakeForm from './components/IntakeForm.jsx';
 import SuggestionList from './components/SuggestionList.jsx';
@@ -7,9 +7,21 @@ import CompositePreview from './components/CompositePreview.jsx';
 import CompositeTimeline from './components/CompositeTimeline.jsx';
 import LocationPicker from './components/LocationPicker.jsx';
 import ShopMap from './components/ShopMap.jsx';
-import { getSuggestions, getShops, createComposite, pollComposite } from './api/client';
+import {
+  getSuggestions,
+  getShops,
+  createComposite,
+  pollComposite,
+  requestCoverage,
+  getCoverage,
+} from './api/client';
 
 const ORIGINAL = 'original';
+
+// Gathering shops for a new area takes a few minutes; check every 8s for up
+// to 15 minutes before giving up on waiting (the job itself carries on).
+const COVERAGE_POLL_MS = 8000;
+const COVERAGE_MAX_POLLS = 110;
 
 export default function App() {
   const [upload, setUpload] = useState(null); // { upload_id, image_url }
@@ -21,6 +33,68 @@ export default function App() {
   // The map's data. Loaded alongside suggestions; a failure here only costs
   // the map, never the suggestions.
   const [shopsState, setShopsState] = useState({ status: 'idle', shops: [] });
+  // Whether we know shops near the user — see services/areaCatalog.js.
+  const [coverage, setCoverage] = useState(null);
+
+  // The last intake answers, so picks can refresh by themselves once shops
+  // near the user have been gathered. Refs because the polling below
+  // outlives the render that started it.
+  const lastIntakeRef = useRef(null);
+  const submitRef = useRef(null);
+
+  useEffect(() => {
+    if (!location) {
+      setCoverage(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timer = null;
+    let polls = 0;
+
+    async function check(first) {
+      let result;
+      try {
+        result = first ? await requestCoverage(location) : await getCoverage(location);
+      } catch {
+        // A refused start (e.g. rate limited) still deserves a status read.
+        if (first) {
+          try {
+            result = await getCoverage(location);
+          } catch {
+            result = null;
+          }
+        }
+      }
+      if (cancelled) return;
+      if (!result) {
+        setCoverage({ status: 'error' });
+        return;
+      }
+
+      setCoverage(result);
+
+      if (result.status === 'gathering') {
+        polls += 1;
+        if (polls >= COVERAGE_MAX_POLLS) {
+          setCoverage({ ...result, status: 'slow' });
+          return;
+        }
+        timer = setTimeout(() => check(false), COVERAGE_POLL_MS);
+      } else if (lastIntakeRef.current) {
+        // Picks are already on screen: refresh them for this location —
+        // either it was just set, or gathering just finished and there are
+        // new shops to choose from.
+        submitRef.current(lastIntakeRef.current);
+      }
+    }
+
+    check(true);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [location]);
 
   // Every version of the room, oldest first. layers[0] is always the upload.
   // Compositing appends, so the user builds a scene up one item at a time
@@ -37,7 +111,9 @@ export default function App() {
     setActiveLayerId(ORIGINAL);
   }
 
-  async function handleIntakeSubmit({ spaceType, budget, style }) {
+  async function handleIntakeSubmit(intake) {
+    const { spaceType, budget, style } = intake;
+    lastIntakeRef.current = intake;
     setSuggestState({ status: 'loading', suggestions: [], message: null, error: null });
     setPendingProduct(null);
     setShopsState((prev) => ({ ...prev, status: 'loading' }));
@@ -58,6 +134,8 @@ export default function App() {
       setSuggestState({ status: 'error', suggestions: [], message: null, error: err.message });
     }
   }
+
+  submitRef.current = handleIntakeSubmit;
 
   // Step 1: picking a suggestion opens the mask step. No API call yet.
   function handleSelectSuggestion(product) {
@@ -161,7 +239,7 @@ export default function App() {
             <div className="uploaded-preview">
               <img src={upload.image_url} alt="Your uploaded space" />
               <IntakeForm onSubmit={handleIntakeSubmit} submitting={suggestState.status === 'loading'}>
-                <LocationPicker location={location} onChange={setLocation} />
+                <LocationPicker location={location} onChange={setLocation} coverage={coverage} />
               </IntakeForm>
             </div>
           )}
@@ -180,6 +258,7 @@ export default function App() {
             <SuggestionList
               suggestions={suggestState.suggestions}
               message={suggestState.message}
+              coverage={coverage}
               onSelect={handleSelectSuggestion}
               selectingProductId={pendingProduct ? pendingProduct.product_id : null}
             />

@@ -125,3 +125,31 @@ export async function geocode(query) {
   }
   return data;
 }
+
+// Do we have shops near this point? POST also starts gathering them in the
+// background if nobody has looked here yet; GET only reports, for polling.
+// Resolves to { status: 'covered' | 'gathering' | 'none_found' | 'busy' |
+// 'failed' | 'not_covered', shops_nearby }.
+export async function requestCoverage(location) {
+  const response = await fetch('/api/coverage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat: location.lat, lon: location.lon }),
+  });
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'coverage_failed');
+  }
+  return data;
+}
+
+export async function getCoverage(location) {
+  const response = await fetch(`/api/coverage?lat=${location.lat}&lon=${location.lon}`);
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'coverage_failed');
+  }
+  return data;
+}

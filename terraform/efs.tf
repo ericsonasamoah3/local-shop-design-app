@@ -57,6 +57,27 @@ resource "aws_efs_access_point" "composites" {
   }
 }
 
+# Shop catalogues gathered on demand around users' locations
+# (services/areaCatalog.js). Unlike the baked-in catalogue, these are written
+# at runtime, so they need to outlive a task the same way uploads do.
+resource "aws_efs_access_point" "catalog_areas" {
+  file_system_id = aws_efs_file_system.media.id
+
+  posix_user {
+    uid = 1000
+    gid = 1000
+  }
+
+  root_directory {
+    path = "/catalog-areas"
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "755"
+    }
+  }
+}
+
 resource "aws_security_group" "efs" {
   name        = "${var.project_name}-efs-sg"
   description = "Allow NFS from ECS tasks"

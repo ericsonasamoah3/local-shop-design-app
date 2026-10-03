@@ -70,6 +70,7 @@ resource "aws_iam_role_policy" "backend_task_efs" {
           "elasticfilesystem:AccessPointArn" = [
             aws_efs_access_point.uploads.arn,
             aws_efs_access_point.composites.arn,
+            aws_efs_access_point.catalog_areas.arn,
           ]
         }
       }

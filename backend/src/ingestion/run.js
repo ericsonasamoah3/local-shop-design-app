@@ -12,8 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { discoverShops } = require('./discover/osm');
-const { fetchShopProducts } = require('./platforms/detect');
-const { classifyProducts } = require('./normalize/classify');
+const { collectProducts } = require('./collect');
 const { buildCatalog } = require('./normalize/product');
 
 const DEFAULT_OUT = process.env.CATALOG_PATH || path.join(__dirname, '..', '..', 'catalog', 'catalog.json');
@@ -25,6 +24,7 @@ function parseArgs(argv) {
     out: DEFAULT_OUT,
     maxShops: Number(process.env.INGEST_MAX_SHOPS || 40),
     dryRun: false,
+    concurrency: Number(process.env.INGEST_CONCURRENCY || 1),
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -68,41 +68,8 @@ async function main() {
     log(`  limiting to ${candidates.length} shops (--max-shops)\n`);
   }
 
-  const byShop = new Map();
-  const report = [];
-
-  for (const [index, shop] of candidates.entries()) {
-    const label = `[${index + 1}/${candidates.length}] ${shop.name}`;
-    log(`${label} -- ${shop.website}`);
-
-    let result;
-    try {
-      result = await fetchShopProducts(shop.website);
-    } catch (err) {
-      log(`  failed: ${err.message}`);
-      report.push({ shop: shop.name, platform: null, raw: 0, kept: 0, note: err.message });
-      continue;
-    }
-
-    if (!result.platform) {
-      log('  no machine-readable catalogue -- skipped');
-      report.push({ shop: shop.name, platform: null, raw: 0, kept: 0, note: result.reason });
-      continue;
-    }
-
-    log(`  ${result.platform}: ${result.products.length} products`);
-
-    const classified = await classifyProducts(result.products, { log });
-    log(`  ${classified.length} are bedding\n`);
-
-    byShop.set(shop.website, classified);
-    report.push({
-      shop: shop.name,
-      platform: result.platform,
-      raw: result.products.length,
-      kept: classified.length,
-    });
-  }
+  const { byShop, report } = await collectProducts(candidates, { log, concurrency: args.concurrency });
+  log('');
 
   const catalog = buildCatalog(candidates, byShop);
   const generated = {

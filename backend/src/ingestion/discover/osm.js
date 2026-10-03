@@ -152,6 +152,16 @@ async function discoverShops(place, radiusMetres = 25000, { log = () => {} } = {
   const location = await geocode(place);
   if (!location) throw new Error(`could_not_geocode: ${place}`);
 
+  return discoverShopsAt(location, radiusMetres, { log, area: place });
+}
+
+/**
+ * Find candidate shops around a point we already have — a user's location,
+ * when the app gathers shops on demand (services/areaCatalog.js).
+ *
+ * @param {{ lat: number, lon: number, displayName?: string }} location
+ */
+async function discoverShopsAt(location, radiusMetres = 25000, { log = () => {}, area = null } = {}) {
   const data = await queryOverpass(buildQuery(location.lat, location.lon, radiusMetres), { log });
 
   const seen = new Set();
@@ -180,7 +190,7 @@ async function discoverShops(place, radiusMetres = 25000, { log = () => {} } = {
     });
   }
 
-  return { origin: location, area: place, shops };
+  return { origin: location, area: area || location.displayName || null, shops };
 }
 
-module.exports = { discoverShops, geocode, websiteOf, buildQuery, SHOP_TAGS };
+module.exports = { discoverShops, discoverShopsAt, geocode, websiteOf, buildQuery, SHOP_TAGS };

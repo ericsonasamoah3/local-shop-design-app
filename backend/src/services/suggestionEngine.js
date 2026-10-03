@@ -14,15 +14,25 @@ function shopById(shopId) {
   return getCatalog().shops.find((s) => s.id === shopId);
 }
 
-// With a user location, nearest shop first; without one, catalogue order as
-// before. Array.prototype.sort is stable, so ties keep catalogue order.
+// With a user location, suggestions come only from shops within this many
+// miles — a "local" pick 80 miles away is not one. Wider than areaCatalog's
+// coverage radius so a user at the edge of a gathered area still sees it.
+const MAX_SUGGEST_MILES = Number(process.env.SUGGEST_MAX_MILES || 25);
+
+// With a user location: drop shops too far away, then nearest first. Without
+// one, catalogue order as before. Array.prototype.sort is stable, so ties
+// keep catalogue order.
 function byDistance(items, origin) {
   if (!origin) return items;
   const distanceOf = (p) => {
     const d = shopDistance(shopById(p.shop_id) || {}, origin);
     return d === null ? Infinity : d;
   };
-  return [...items].sort((a, b) => distanceOf(a) - distanceOf(b));
+  return items
+    .map((p) => ({ p, d: distanceOf(p) }))
+    .filter(({ d }) => d <= MAX_SUGGEST_MILES)
+    .sort((a, b) => a.d - b.d)
+    .map(({ p }) => p);
 }
 
 function pickForCategory(category, budget, style, origin) {
@@ -94,7 +104,16 @@ function getSuggestions({ spaceType, budget, style, origin = null }) {
   });
 
   if (suggestions.length === 0) {
-    return { suggestions: [], message: 'no_matches_for_criteria' };
+    // Tell "nothing near you" apart from "nothing at this budget", because
+    // the fix is different: wait for areaCatalog to gather shops, versus
+    // widen the budget.
+    const anyNearby =
+      !origin ||
+      getCatalog().shops.some((s) => {
+        const d = shopDistance(s, origin);
+        return d !== null && d <= MAX_SUGGEST_MILES;
+      });
+    return { suggestions: [], message: anyNearby ? 'no_matches_for_criteria' : 'no_shops_nearby' };
   }
 
   return { suggestions };

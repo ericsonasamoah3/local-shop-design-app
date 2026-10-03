@@ -8,6 +8,7 @@ const suggestRoute = require('./routes/suggest');
 const compositeRoute = require('./routes/composite');
 const shopsRoute = require('./routes/shops');
 const geocodeRoute = require('./routes/geocode');
+const coverageRoute = require('./routes/coverage');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.use('/api/suggest', suggestRoute);
 app.use('/api/composite', compositeRoute);
 app.use('/api/shops', shopsRoute);
 app.use('/api/geocode', geocodeRoute);
+app.use('/api/coverage', coverageRoute);
 
 app.use((req, res) => res.status(404).json({ error: 'not_found' }));
 

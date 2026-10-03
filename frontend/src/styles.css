@@ -949,3 +949,22 @@ button {
   font-size: 11px;
   font-weight: 500;
 }
+.location-picker__hint.is-working::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ochre);
+  vertical-align: middle;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .location-picker__hint.is-working::before {
+    animation: coverage-pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes coverage-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}

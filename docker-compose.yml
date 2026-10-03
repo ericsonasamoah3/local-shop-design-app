@@ -11,6 +11,8 @@ services:
       # container to see what's there.
       - ./backend/uploads:/app/uploads
       - ./backend/composites:/app/composites
+      # Shop catalogues gathered on demand around users' locations.
+      - ./backend/catalog-areas:/app/catalog-areas
     environment:
       - PORT=3001
       # Optional: unset means the backend skips the Claude planning call.

@@ -15,7 +15,15 @@ const GEOCODE_ERRORS = {
   query_too_long: 'That is a bit long. Try just a postcode or town.',
 };
 
-export default function LocationPicker({ location, onChange }) {
+const COVERAGE_NOTES = {
+  gathering: 'Finding shops near you. This can take a few minutes the first time.',
+  slow: "Still finding shops near you. It's taking longer than usual, so check back soon.",
+  none_found: "We looked, but found no shops near you whose products we can read online.",
+  busy: "We can't search a new area right now. Try again later.",
+  failed: "Something went wrong finding shops near you. Try again later.",
+};
+
+export default function LocationPicker({ location, onChange, coverage }) {
   const [status, setStatus] = useState('idle'); // idle | locating | looking_up
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
@@ -75,6 +83,16 @@ export default function LocationPicker({ location, onChange }) {
             Change
           </button>
         </div>
+        {coverage && coverage.status === 'covered' && (
+          <p className="location-picker__hint">
+            {coverage.shops_nearby} shop{coverage.shops_nearby === 1 ? '' : 's'} within 15 miles.
+          </p>
+        )}
+        {coverage && COVERAGE_NOTES[coverage.status] && (
+          <p className={`location-picker__hint${coverage.status === 'gathering' ? ' is-working' : ''}`} role="status">
+            {COVERAGE_NOTES[coverage.status]}
+          </p>
+        )}
       </div>
     );
   }

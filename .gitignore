@@ -5,6 +5,9 @@ backend/uploads/*
 backend/composites/*
 !backend/composites/.gitkeep
 !backend/composites/mock-placeholder.svg
+# Written at runtime by services/areaCatalog.js, unlike backend/catalog/
+# which is generated offline and committed.
+backend/catalog-areas/
 .env
 *.log
 terraform/.terraform/

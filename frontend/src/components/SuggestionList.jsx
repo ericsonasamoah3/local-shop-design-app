@@ -1,4 +1,21 @@
-export default function SuggestionList({ suggestions, message, onSelect, selectingProductId }) {
+export default function SuggestionList({ suggestions, message, coverage, onSelect, selectingProductId }) {
+  if (message === 'no_shops_nearby') {
+    if (coverage && coverage.status === 'gathering') {
+      return (
+        <p className="empty-note">
+          We're finding shops near you now. This takes a few minutes the first time anyone
+          searches your area. Your picks will appear here by themselves.
+        </p>
+      );
+    }
+    return (
+      <p className="empty-note">
+        We couldn't find shops near you that sell bedding online yet. We only list shops whose
+        products we can read from their website.
+      </p>
+    );
+  }
+
   if (message === 'category_coming_soon') {
     return <p className="empty-note">This space type isn't stocked yet in Phase 1 — try "Bed" instead.</p>;
   }

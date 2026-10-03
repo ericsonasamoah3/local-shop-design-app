@@ -53,7 +53,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_security_group" "ecs_tasks" {
-  name        = "${var.project_name}-ecs-tasks-sg"
+  name = "${var.project_name}-ecs-tasks-sg"
   # Out of date -- public traffic now arrives via API Gateway -- but AWS
   # cannot edit a security group's description, and replacing a group that
   # running tasks and EFS are attached to is not worth a corrected label.

@@ -7,7 +7,7 @@ RUN npm install --omit=dev
 
 COPY . .
 
-RUN mkdir -p uploads composites
+RUN mkdir -p uploads composites catalog-areas
 
 EXPOSE 3001
 
